@@ -1,0 +1,68 @@
+# Byte-compiled / optimized / DLL files
+.pytest_cache/*
+__pycache__/
+*.py[cod]
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Packaging files:
+*.egg*
+*.pid
+*.out
+
+# Sphinx docs:
+build
+
+# SQLite3 database files:
+*.db
+*.sqlite3
+*.sqlite
+
+# Logs:
+*.log
+
+# Environment variables
+# *.env
+
+# Django stuff:
+*.mo
+*.pot
+
+# IDE
+.project
+.pydevproject
+.settings
+*/build/
+.idea/
+.settings/
+*.ini
+
+# Linux Editors
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+.elc
+auto-save-list
+tramp
+.\#*
+*.swp
+*.swo
+
+# Rope
+.ropeproject
+
+# Mac
+.DS_Store
+.DS_Store?
+._*
+.~lock.*
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+#Others
+.coverage
