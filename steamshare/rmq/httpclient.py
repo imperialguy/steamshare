@@ -256,17 +256,17 @@ class RMQHTTPClient(object):
 
         return self.make_request(url, 'POST', data=data)
 
-    def view_eeq_binding(self, btype, vhost, exchange, eorq, binding_name):
+    def view_eeq_binding(self, btype, vhost, exchange, eorq, routing_key):
         param = 'q' if btype == 'eq' else 'e'
         url = self.build_url(self.bindings_base_url, vhost, 'e',
-                                exchange, param, eorq, binding_name)
+                                exchange, param, eorq, routing_key)
 
         return self.make_request(url, 'GET')
 
-    def delete_eeq_binding(self, vhost, exchange, queue, binding_name):
+    def delete_eeq_binding(self, vhost, exchange, queue, routing_key):
         param = 'q' if btype == 'eq' else 'e'
         url = self.build_url(self.bindings_base_url, vhost, 'e',
-                                exchange, param, eorq, binding_name)
+                                exchange, param, eorq, routing_key)
 
         return self.make_request(url, 'DELETE')
 
