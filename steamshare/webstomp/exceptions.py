@@ -1,5 +1,20 @@
 """Errors thrown by stomp.py connections.
+
 """
+
+class ErrorFrameReceivedException(Exception):
+    """
+    Common exception class. All specific stomp.py exceptions are subclasses
+    of StompException, allowing the library user to catch all current and
+    future library exceptions.
+    """
+
+class EmptyFrameException(Exception):
+    """
+    Common exception class. All specific stomp.py exceptions are subclasses
+    of StompException, allowing the library user to catch all current and
+    future library exceptions.
+    """
 
 class StompException(Exception):
     """

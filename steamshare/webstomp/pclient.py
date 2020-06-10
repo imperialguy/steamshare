@@ -439,13 +439,13 @@ class ProtocolClient(object):
 
     def transmit(self, frame):
         # with self.__listeners_change_condition:
-        listeners = sorted(self.listeners.items())
-
-        for (_, listener) in listeners:
-            try:
-                listener.on_send(frame)
-            except AttributeError:
-                continue
+        # listeners = sorted(self.listeners.items())
+        #
+        # for (_, listener) in listeners:
+        #     try:
+        #         listener.on_send(frame)
+        #     except AttributeError:
+        #         continue
 
         # if frame.cmd == utils.CMD_DISCONNECT and utils.HDR_RECEIPT in \
         #         frame.headers:
@@ -537,7 +537,7 @@ class ProtocolClient(object):
         if self.auto_content_length and body and utils.HDR_CONTENT_LENGTH not \
                 in headers:
             headers[utils.HDR_CONTENT_LENGTH] = len(body)
-        self.send_frame(utils.CMD_SEND, headers, body)
+        return self.send_frame(utils.CMD_SEND, headers, body)
 
     def subscribe(self, destination, id, ack="client", headers=None,
                 **keyword_headers):
@@ -551,14 +551,14 @@ class ProtocolClient(object):
         :param dict headers: additional headers to send with subscription
         :param keyword_headers: additional headers to send with subscription
         """
-        self.logger.debug('Subscribing')
         assert destination is not None, "'destination' is required"
         assert id is not None, "'id' is required"
+        self.logger.debug('Subscribing to {}'.format(destination))
         headers = utils.merge_headers([headers, keyword_headers])
         headers[utils.HDR_DESTINATION] = destination
         headers[utils.HDR_ID] = id
         headers[utils.HDR_ACK] = ack
-        self.send_frame(utils.CMD_SUBSCRIBE, headers)
+        return self.send_frame(utils.CMD_SUBSCRIBE, headers)
 
     def unsubscribe(self, id, headers=None, **keyword_headers):
         """

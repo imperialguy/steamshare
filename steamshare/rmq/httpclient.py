@@ -331,7 +331,7 @@ class RMQHTTPClient(object):
         data = {'count': max_num_messages,
                 'ackmode':'ack_requeue_true' if requeue else \
                     'ack_requeue_false',
-                'encoding':'auto', 'truncate':50000}
+                'encoding':'auto', 'truncate': 50000}
 
         return self.make_request(url, 'POST', data=data)
 
