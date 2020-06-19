@@ -222,7 +222,7 @@ class ProtocolClient(object):
                 pass
             headers[key] = val
 
-    def ack(self, id, transaction=None, receipt=None):
+    def ack(self, id, receipt, transaction=None):
         """
         Acknowledge 'consumption' of a message by id.
 
@@ -234,12 +234,12 @@ class ProtocolClient(object):
         headers = {utils.HDR_ID: id}
         if transaction:
             headers[utils.HDR_TRANSACTION] = transaction
-        rec = receipt or utils.get_uuid()
-        headers[utils.HDR_RECEIPT] = rec
-        self.set_receipt(rec, utils.CMD_ACK)
-        self.send_frame(utils.CMD_ACK, headers)
+        # rec = receipt or utils.get_uuid()
+        headers[utils.HDR_RECEIPT] = receipt
+        # self.set_receipt(rec, utils.CMD_ACK)
+        return self.send_frame(utils.CMD_ACK, headers)
 
-    def nack(self, id, transaction=None, receipt=None, **keyword_headers):
+    def nack(self, id, receipt, transaction=None, **keyword_headers):
         """
         Let the server know that a message was not consumed.
 
@@ -251,11 +251,10 @@ class ProtocolClient(object):
         assert id is not None, "'id' is required"
         headers = {utils.HDR_ID: id}
         headers = utils.merge_headers([headers, keyword_headers])
+        headers[utils.HDR_RECEIPT] = receipt
         if transaction:
             headers[utils.HDR_TRANSACTION] = transaction
-        if receipt:
-            headers[utils.HDR_RECEIPT] = receipt
-        self.send_frame(utils.CMD_NACK, headers)
+        return self.send_frame(utils.CMD_NACK, headers)
 
     def connect(self, username, passcode, vhost, headers=None,
             **keyword_headers):
@@ -368,7 +367,7 @@ class ProtocolClient(object):
         # queue_obj.put('raise exception')
         # threading.main_thread().join()
 
-    def disconnect(self, receipt=None, headers=None, **keyword_headers):
+    def disconnect(self, receipt, headers=None, **keyword_headers):
         """
         Disconnect from the server.
 
@@ -383,15 +382,14 @@ class ProtocolClient(object):
         #     return
         self.logger.debug('Disconnect attempt')
         headers = utils.merge_headers([headers, keyword_headers])
-        rec = receipt or utils.get_uuid()
-        headers[utils.HDR_RECEIPT] = rec
+        headers[utils.HDR_RECEIPT] = receipt
         # self.set_receipt(rec, utils.CMD_DISCONNECT)
 
         # self.logger.debug('Disconnect attempt using receipt id: {}'.format(rec))
         # self.disconnect_receipt_listener = WaitingListener(self.logger, rec)
         # self.set_listener("disconnect-receipt-listener",
         #     self.disconnect_receipt_listener)
-        self.send_frame(utils.CMD_DISCONNECT, headers)
+        return self.send_frame(utils.CMD_DISCONNECT, headers)
         # self.disconnect_receipt_listener.wait_on_receipt()
         #
         # if not self.disconnect_receipt_listener.received:
