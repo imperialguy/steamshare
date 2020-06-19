@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prefect-agent
+  labels:
+    app: prefect-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prefect-agent
+  template:
+    metadata:
+      labels:
+        app: prefect-agent
+    spec:
+      imagePullSecrets:
+        - name: ""
+      containers:
+        - name: agent
+          image: prefecthq/prefect:latest
+          imagePullPolicy: Always
+          command: ["/bin/bash", "-c"]
+          args: ["prefect agent start kubernetes"]
+          env:
+            - name: PREFECT__CLOUD__AGENT__AUTH_TOKEN
+              value: ""
+            - name: PREFECT__CLOUD__API
+              value: "https://api.prefect.io"
+            - name: NAMESPACE
+              value: "default"
+            - name: IMAGE_PULL_SECRETS
+              value: ""
+            - name: PREFECT__CLOUD__AGENT__LABELS
+              value: "[]"
+            - name: JOB_MEM_REQUEST
+              value: ""
+            - name: JOB_MEM_LIMIT
+              value: ""
+            - name: JOB_CPU_REQUEST
+              value: ""
+            - name: JOB_CPU_LIMIT
+              value: ""
+            - name: PREFECT__BACKEND
+              value: "cloud"
+            - name: PREFECT__CLOUD__AGENT__AGENT_ADDRESS
+              value: "http://:8080"
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 40
+            periodSeconds: 40
+            failureThreshold: 2
+        - name: resource-manager
+          image: prefecthq/prefect:latest
+          imagePullPolicy: Always
+          command: ["/bin/bash", "-c"]
+          args:
+            [
+              "python -c 'from prefect.agent.kubernetes import ResourceManager; ResourceManager().start()'",
+            ]
+          env:
+            - name: PREFECT__CLOUD__AGENT__AUTH_TOKEN
+              value: ""
+            - name: PREFECT__CLOUD__API
+              value: "https://api.prefect.io"
+            - name: PREFECT__CLOUD__AGENT__RESOURCE_MANAGER__LOOP_INTERVAL
+              value: "60"
+            - name: NAMESPACE
+              value: "default"
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
