@@ -8,7 +8,11 @@ from flask import jsonify
 from dateutil import tz
 import datetime
 import tornado.ioloop
+# import multiprocessing.managers
+# import multiprocessing_logging
+import multiprocessing
 import threading
+import traceback
 import tempfile
 import logging
 import inspect
@@ -19,6 +23,18 @@ import trio
 import sys
 import os
 
+# backup_autoproxy = multiprocessing.managers.AutoProxy
+#
+# # Defining a new AutoProxy that handles unwanted key argument 'manager_owned'
+# def redefined_autoproxy(token, serializer, manager=None, authkey=None,
+#           exposed=None, incref=True, manager_owned=True):
+#     # Calling original AutoProxy without the unwanted key argument
+#     return backup_autoproxy(token, serializer, manager, authkey,
+#                      exposed, incref)
+#
+# # Updating AutoProxy definition in multiprocessing.managers package
+# multiprocessing.managers.AutoProxy = redefined_autoproxy
+# multiprocessing_logging.install_mp_handler()
 
 class NestedDict(dict):
     """Nested Dictionary class
@@ -31,6 +47,27 @@ class NestedDict(dict):
         except KeyError:
             value = self[item] = type(self)()
             return value
+
+class SteamProcess(multiprocessing.Process):
+    def __init__(self, *args, **kwargs):
+        multiprocessing.Process.__init__(self, *args, **kwargs)
+        self._pconn, self._cconn = multiprocessing.Pipe()
+        self._exception = None
+
+    def run(self):
+        try:
+            multiprocessing.Process.run(self)
+            self._cconn.send(None)
+        except Exception as e:
+            tb = traceback.format_exc()
+            self._cconn.send((tb))
+            raise e  # You can still rise this exception if you need to
+
+    @property
+    def exception(self):
+        if self._pconn.poll():
+            self._exception = self._pconn.recv()
+        return self._exception
 
 class SteamThread(threading.Thread):
     def _get_my_tid(self):
@@ -78,18 +115,18 @@ class StaticShared(object):
         """raises the exception, performs cleanup if needed"""
         if not inspect.isclass(exctype):
             raise TypeError("Only types can be raised (not instances)")
-        # res = ctypes.pythonapi.PyThreadState_SetAsyncExc(tid, ctypes.py_object(
-        #     exctype))
+        # res = ctypes.pythonapi.PyThreadState_SetAsyncExc(tid,
+        # ctypes.py_object(exctype))
         res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(tid),
             ctypes.py_object(exctype))
         if res == 0:
             raise ValueError("invalid thread id")
         elif res != 1:
             # """if it returns a number greater than one, you're in trouble,
-            # and you should call it again with exc=NULL to revert the effect"""
+            # and you should call it again with exc=NULL to revert the
+            # effect"""
             ctypes.pythonapi.PyThreadState_SetAsyncExc(tid, 0)
             raise SystemError("PyThreadState_SetAsyncExc failed")
-
 
     @staticmethod
     def get_logger(filename,
@@ -102,7 +139,8 @@ class StaticShared(object):
             raise LoggingError('Missing parameter: log_file_name')
 
         if not formatter:
-            formatter = '[%(asctime)s] [p%(process)s] {%(pathname)s:%(lineno)d} [%(levelname)s] %(message)s'
+            formatter = '[%(asctime)s] [p%(process)s] {%(pathname)s:%(lineno'\
+                ')d} [%(levelname)s] %(message)s'
 
         # xformatter = logging.Formatter(formatter)
         logging.basicConfig(format=formatter)
@@ -125,6 +163,14 @@ class ClassicShared(object):
     def __init__(self, logger):
         self.logger = logger
 
+    def write_to_file(self, filepath, message, override=False):
+        # root_dir = os.path.join(os.sep, 'tmp', 'logs', getpass.getuser())
+        # filepath = os.path.join(root_dir, filename)
+        mode = 'w' if override else 'a+'
+        with open(filepath, mode) as f:
+            f.write(message)
+            f.write('\n')
+
     def run_loop(self, callback):
         loop = tornado.ioloop.IOLoop.current()
         loop.add_callback(callback)
@@ -134,7 +180,17 @@ class ClassicShared(object):
         except KeyboardInterrupt:
             self.logger.debug('interrupted - so exiting!')
 
-    def generate_response(self, data, is_error=False, message=None, code=None):
+    def zero_padded(self, number, padding=4):
+        str_num = str(number)
+        actual_padding = padding - len(str_num)
+        padded_num = ''.join((''.join(('0' for _ in range(actual_padding))),
+            str_num))
+        self.logger.debug('Input number: {}, padding: {}, paddded number: '
+            '{}'.format(number, padding, padded_num))
+        return padded_num
+
+    def generate_response(self, data, is_error=False, message=None,
+            code=None):
         resp = {'data': data, 'success': not is_error}
 
         if is_error:

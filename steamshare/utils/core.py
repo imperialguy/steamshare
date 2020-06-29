@@ -96,7 +96,8 @@ class ClassicCore(object):
                                                 response.reason,
                                                 response.content))
                 raise RequestLauncherError(response.status_code,
-                                        'SteamShare Request Lanuch Error')
+                                            response.reason
+                                            )
             else:
                 self.logger.debug('{} request to {} is successful with the'
                                 ' following response\n{}'.format(

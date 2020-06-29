@@ -1,6 +1,10 @@
 import json
 
 
+class SteamProcessException(Exception):
+    pass
+
+
 class Error(Exception):
     """ General Error
 
