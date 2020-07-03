@@ -16,6 +16,7 @@ import traceback
 import tempfile
 import logging
 import inspect
+import pathlib
 import pandas
 import random
 import ctypes
@@ -36,6 +37,7 @@ import os
 # multiprocessing.managers.AutoProxy = redefined_autoproxy
 # multiprocessing_logging.install_mp_handler()
 
+
 class NestedDict(dict):
     """Nested Dictionary class
 
@@ -47,6 +49,7 @@ class NestedDict(dict):
         except KeyError:
             value = self[item] = type(self)()
             return value
+
 
 class SteamProcess(multiprocessing.Process):
     def __init__(self, *args, **kwargs):
@@ -68,6 +71,7 @@ class SteamProcess(multiprocessing.Process):
         if self._pconn.poll():
             self._exception = self._pconn.recv()
         return self._exception
+
 
 class SteamThread(threading.Thread):
     def _get_my_tid(self):
@@ -102,6 +106,10 @@ class SteamThread(threading.Thread):
 
 
 class StaticShared(object):
+    PROJ_ROOT = str(pathlib.Path(__file__).parent.parent)
+    FIXTURES_ROOT = os.path.join(PROJ_ROOT, 'fixtures')
+    RESOURCES_ROOT = os.path.join(PROJ_ROOT, 'resources')
+
     @staticmethod
     @contextmanager
     def environment(params):
@@ -117,7 +125,8 @@ class StaticShared(object):
             raise TypeError("Only types can be raised (not instances)")
         # res = ctypes.pythonapi.PyThreadState_SetAsyncExc(tid,
         # ctypes.py_object(exctype))
-        res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(tid),
+        res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+            ctypes.c_long(tid),
             ctypes.py_object(exctype))
         if res == 0:
             raise ValueError("invalid thread id")
@@ -129,12 +138,46 @@ class StaticShared(object):
             raise SystemError("PyThreadState_SetAsyncExc failed")
 
     @staticmethod
+    def load_resource(filename, engine=None):
+        """ Load resource file
+
+        :param filename: name of the resource file - needs to yaml filetype
+        :param engine: name of the engine if applicable
+        :type engine: str
+        :type filename: str
+        :returns: the corresponding yaml data
+        :rtype: ObjectDict
+
+        """
+        resource_path = os.path.join(RESOURCES_ROOT, engine, filename
+                                     ) if engine else os.path.join(RESOURCES_ROOT, filename)
+
+        return ObjectDict(dataloader(resource_path))
+
+    @staticmethod
+    def load_config(engine):
+        """ Load configuration based on the engine
+
+        :param engine: name of the engine if applicable
+        :type engine: str
+        :returns: engine configuration
+        :rtype: ObjectDict
+
+        """
+        config = load_resource('config.yaml', engine)
+        bconfig = load_resource('base.yaml')
+        config.update(bconfig)
+
+        return config
+
+    @staticmethod
     def get_logger(filename,
-                    formatter=None,
-                    log_level=logging.DEBUG,
-                    log_to_file=False,
-                    log_file_name=None
-                    ):
+                   formatter=None,
+                   log_level=logging.DEBUG,
+                   log_to_file=False,
+                   log_file_name=None,
+                   log_file_mode='a'
+                   ):
         if log_to_file and not log_file_name:
             raise LoggingError('Missing parameter: log_file_name')
 
@@ -146,8 +189,9 @@ class StaticShared(object):
         logging.basicConfig(format=formatter)
         xlogger = logging.getLogger(filename)
 
-        handler = logging.FileHandler(log_file_name) if log_to_file and \
-                    log_file_name else logging.StreamHandler(sys.stdout)
+        handler = logging.FileHandler(log_file_name, mode=log_file_mode
+                                      ) if log_to_file and log_file_name else \
+            logging.StreamHandler(sys.stdout)
         # handler.set_name(filename)
         # handler.setLevel(log_level)
         # handler.setFormatter(xformatter)
@@ -184,13 +228,13 @@ class ClassicShared(object):
         str_num = str(number)
         actual_padding = padding - len(str_num)
         padded_num = ''.join((''.join(('0' for _ in range(actual_padding))),
-            str_num))
+                              str_num))
         self.logger.debug('Input number: {}, padding: {}, paddded number: '
-            '{}'.format(number, padding, padded_num))
+                          '{}'.format(number, padding, padded_num))
         return padded_num
 
     def generate_response(self, data, is_error=False, message=None,
-            code=None):
+                          code=None):
         resp = {'data': data, 'success': not is_error}
 
         if is_error:
@@ -205,7 +249,7 @@ class ClassicShared(object):
         return resp
 
     def get_current_timestamp(self, timestamp_format=None, to_zone=None,
-                                from_zone=None):
+                              from_zone=None):
         from_zone = tz.tzutc() if not from_zone else tz.gettz(from_zone)
         to_zone = tz.tzlocal() if not to_zone else tz.gettz(to_zone)
 
@@ -314,7 +358,7 @@ class ClassicShared(object):
         """
         if file_type:
             return [os.path.join(r, f) for r, _, files in os.walk(root_dir
-            ) for f in files if f.endswith(file_type)]
+                                                                  ) for f in files if f.endswith(file_type)]
 
         return [os.path.join(
             r, f) for r, _, files in os.walk(root_dir) for f in files]

@@ -2,6 +2,7 @@ from steamshare.utils.errors import RequestLauncherError
 from requests.packages.urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 import requests
+import re
 
 class ClassicCore(object):
     def __init__(self, logger):

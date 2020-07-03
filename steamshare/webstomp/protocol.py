@@ -4,7 +4,7 @@ from steamshare.webstomp.utils import (
 )
 
 
-class StompProtocol(object):
+class StompProtocolManager(object):
     """
     Represents version 1.2 of the protocol
     (see https://stomp.github.io/stomp-specification-1.2.html).
