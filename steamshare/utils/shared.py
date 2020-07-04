@@ -155,6 +155,13 @@ class StaticShared(object):
         return ObjectDict(dataloader(resource_path))
 
     @staticmethod
+    def sequence_generator():
+        n = 1
+        while True:
+            yield n
+            n += 1
+
+    @staticmethod
     def load_config(engine):
         """ Load configuration based on the engine
 

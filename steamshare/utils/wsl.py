@@ -1,3 +1,6 @@
+from steamshare.webstomp.utils import StompUtils
+from steamshare.webstomp import exceptions
+import random
 import trio
 
 
@@ -11,9 +14,38 @@ class StompMessage(object):
 
 class WebSocketLib(object):
     @staticmethod
+    async def unsubscriber(logger,
+                           websocket,
+                           id,
+                           timeout,
+                           retries,
+                           stomp_protocol_manager):
+
+        unsubscribe_successful = False
+        n = 0
+        while n < retries:
+            try:
+                logger.debug('Unsubscribe attempt #{}'.format(n + 1))
+                unsubscribe_cmd = stomp_protocol_manager.unsubscribe(id)
+                await WebSocketLib.sender(logger, websocket, unsubscribe_cmd,
+                                          timeout)
+            except Exception as e:
+                logger.debug('Unsubscribe operation on {} failed due to the '
+                             'following exception\n{}'.format(queue, e))
+            else:
+                unsubscribe_successful = True
+                break
+            n += 1
+
+        if not unsubscribe_successful:
+            logger.debug('Unsubscribe on queue {} failed after {} attempts'
+                         ''.format(queue, retries))
+
+    @staticmethod
     async def subscriber(
         logger,
         websocket,
+        id,
         queue,
         timeout,
         retries,
@@ -30,12 +62,12 @@ class WebSocketLib(object):
         while n < retries:
             try:
                 logger.debug('Subscribe attempt #{}'.format(n + 1))
-                subscribe_cmd = stomp_protocol_manager.subscribe(queue)
-                await sender(websocket, subscribe_cmd, timeout)
+                subscribe_cmd = stomp_protocol_manager.subscribe(queue, id)
+                await WebSocketLib.sender(logger, websocket, subscribe_cmd,
+                                          timeout)
             except Exception as e:
                 logger.debug('Subscribe operation on {} failed due to the '
-                             'following exception\n{}'.format(
-                                 queue, e))
+                             'following exception\n{}'.format(queue, e))
             else:
                 subscribe_successful = True
                 break
@@ -50,7 +82,7 @@ class WebSocketLib(object):
         with trio.fail_after(timeout):
             message = await websocket.get_message()
 
-        frame = utils.parse_frame(utils.encode(message))
+        frame = StompUtils.parse_frame(StompUtils.encode(message))
         if not frame:
             raise exceptions.EmptyFrameException()
 
@@ -59,7 +91,9 @@ class WebSocketLib(object):
 
         if frame.cmd.lower() == 'error':
             raise exceptions.ErrorFrameReceivedException('headers=%r, '
-                                                         'body=%r', frame.headers, frame.body)
+                                                         'body=%r',
+                                                         frame.headers,
+                                                         frame.body)
 
         return frame
 
@@ -70,7 +104,8 @@ class WebSocketLib(object):
             await websocket.send_message(message)
 
     @staticmethod
-    async def publisher(logger, websocket, timeout, interval, stomp_protocol_manager, msg_cnt):
+    async def publisher(logger, websocket, timeout, interval,
+                        stomp_protocol_manager, msg_cnt):
         logger.debug('Indefinite publisher started...')
         n = 0
         while True:
@@ -81,14 +116,15 @@ class WebSocketLib(object):
                     content = 'message {}'.format(random.randint(100, 1000000))
                     message = stomp_protocol_manager.send(content)
                     await trio.sleep(0.001)
-                    await sender(websocket, message, timeout)
-            except trio.TooSlowError as e:
+                    await WebSocketLib.sender(logger, websocket, message, timeout)
+            except trio.TooSlowError:
                 logger.error('Message publisher timed out\nIndefinite publishing'
                              ' attempt halted')
                 break
             except Exception as e:
                 logger.debug('Message publisher failed due to the following '
-                             'error\nIndefinite publishing attempt halted')
+                             'error:\n{}\nIndefinite publishing attempt '
+                             'halted!!!'.format(e))
                 break
             n += 1
             logger.debug('Sleeping for {} seconds before round #{} of burst '
@@ -102,12 +138,12 @@ class WebSocketLib(object):
         while not right_frame_type and n < retry_attempts:
             try:
                 logger.debug('Minor connection attempt #{}'.format(n + 1))
-                await sender(websocket, cmd, timeout)
-                frame = await receiver(websocket, timeout)
-            except trio.TooSlowError as e:
+                await WebSocketLib.sender(logger, websocket, cmd, timeout)
+                frame = await WebSocketLib.receiver(logger, websocket, timeout)
+            except trio.TooSlowError:
                 fail_reason = 'conection attempt timed out after {}'\
                     ' seconds'.format(interval)
-            except exceptions.EmptyFrameException as e:
+            except exceptions.EmptyFrameException:
                 fail_reason = 'empty frame received'
             except exceptions.ErrorFrameReceivedException as e:
                 fail_reason = 'following error frame received\n{}'.format(e)
@@ -181,11 +217,13 @@ class WebSocketLib(object):
         while not_connected:
             logger.debug('Protocol major connection attempt {}'.format(n + 1))
             try:
-                await connect(websocket, connect_cmd, timeout,
-                              minor_interval, retry_attempts)
+                await WebSocketLib.connect(logger, websocket, connect_cmd, timeout,
+                                           minor_interval, retry_attempts)
             except Exception as e:
                 logger.debug('Waiting for {} seconds before the next major '
-                             'protocol connection attempt'.format(major_interval))
+                             'protocol connection attempt due to the '
+                             'following exception:\n{}'.format(
+                                 major_interval, e))
             else:
                 break
             await trio.sleep(major_interval)
@@ -208,10 +246,10 @@ class WebSocketLib(object):
             if log_indefinite_listening_attempt:
                 logger.debug('Indefinite Listening attempt #{}'.format(n + 1))
             try:
-                frame = await receiver(websocket, listener_timeout)
+                frame = await WebSocketLib.receiver(logger, websocket, listener_timeout)
                 (frame_type, frame_headers, frame_body) = (frame.cmd.lower(),
                                                            frame.headers, frame.body)
-            except trio.TooSlowError as e:
+            except trio.TooSlowError:
                 logger.error('Message receiver timed out\nIndefinite Listening'
                              ' attempt halted')
                 break
@@ -220,27 +258,27 @@ class WebSocketLib(object):
             except exceptions.ErrorFrameReceivedException as e:
                 logger.error('Received following error frame \n{}\nIndefinite '
                              'Listening attempt halted!!!\n'.format(traceback.format_exc()))
-                receipt_id = utils.get_uuid()
+                receipt_id = StompUtils.get_uuid()
                 disconnect_msg = stomp_protocol_manager.disconnect(receipt_id)
-                await sender(websocket, disconnect_msg, disconnect_timeout)
+                await WebSocketLib.sender(logger, websocket, disconnect_msg, disconnect_timeout)
                 await trio.sleep(0.001)
                 raise
             except Exception as e:
                 logger.error('Receiver failed due to the following error\n{}\n'
                              'Indefinite Listening attempt halted'.format(
-                                 traceback.format_exc()))
+                                 traceback.format_exc(e)))
                 break
             else:
                 if frame_type == 'message':
-                    receipt_id = utils.get_uuid()
+                    receipt_id = StompUtils.get_uuid()
                     message_id = frame_headers['message-id']
                     message_queue = frame_headers['destination'].split(
                         '/')[-1]
                     message = frame.body
                     logger.debug('RAW MESSAGE RECEIVED =====> {}'.format(
                         message))
-                    formatted_message = utils.decode(message.rstrip().rstrip(
-                        utils.NULL))
+                    formatted_message = StompUtils.decode(message.rstrip().rstrip(
+                        StompUtils.NULL))
                     stomp_message = StompMessage(message_id,
                                                  receipt_id,
                                                  formatted_message,
@@ -268,8 +306,8 @@ class WebSocketLib(object):
             try:
                 logger.debug('Acknowledgement message send attempt #{} to '
                              'server for message id: {}'.format(n + 1, message_id))
-                await sender(websocket, ack_msg, send_timeout)
-            except trio.TooSlowError as e:
+                await WebSocketLib.sender(logger, websocket, ack_msg, send_timeout)
+            except trio.TooSlowError:
                 logger.debug(
                     'Acknowledgement message send failed due to timeout')
             else:
@@ -284,7 +322,7 @@ class WebSocketLib(object):
                 with trio.fail_after(receipt_timeout):
                     receipt = stomp_protocol_manager.get_receipt(receipt_id)
                     await receipt.wait()
-            except trio.TooSlowError as e:
+            except trio.TooSlowError:
                 logger.debug('Acknowledgement receipt for message id {} and '
                              'receipt id {} combo timed out'.format(message_id,
                                                                     receipt_id))

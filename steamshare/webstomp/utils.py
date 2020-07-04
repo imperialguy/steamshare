@@ -15,6 +15,7 @@ class StompFrame(object):
     :param body: the content of the frame.
 
     """
+
     def __init__(self, cmd, headers=None, body=None):
         self.cmd = cmd
         self.headers = headers if headers is not None else {}
@@ -23,7 +24,7 @@ class StompFrame(object):
 
     def __str__(self):
         return "{cmd=%s,headers=[%s],body=%s}" % (self.cmd, self.headers,
-                    self.body)
+                                                  self.body)
 
 
 class StompUtils(object):
@@ -79,21 +80,16 @@ class StompUtils(object):
     #
     PASSCODE_RE = re.compile(r"passcode:\s+[^\' ]+")
 
-    ENC_NEWLINE = encode("\n")
-    ENC_NULL = encode(NULL)
-
-
     _HEADER_ESCAPES = {
         '\r': '\\r',
         '\n': '\\n',
         ':': '\\c',
         '\\': '\\\\',
     }
-    _HEADER_UNESCAPES = dict((value, key) for (key, value) in \
-        _HEADER_ESCAPES.items())
+    _HEADER_UNESCAPES = dict((value, key) for (key, value) in
+                             _HEADER_ESCAPES.items())
 
     HEARTBEAT_FRAME = StompFrame("heartbeat")
-
 
     @staticmethod
     def decode(byte_data, encoding="utf-8"):
@@ -123,7 +119,7 @@ class StompUtils(object):
             return char_data
         else:
             raise TypeError('message should be a string or bytes, found %s'
-                '' % type(char_data))
+                            '' % type(char_data))
 
     @staticmethod
     def pack(pieces=()):
@@ -198,7 +194,7 @@ class StompUtils(object):
         else:
             preamble_end = len(frame)
             body_start = preamble_end
-        preamble = decode(frame[0:preamble_end])
+        preamble = StompUtils.decode(frame[0:preamble_end])
         preamble_lines = StompUtils.LINE_END_RE.split(preamble)
         preamble_len = len(preamble_lines)
         body = frame[body_start:]
@@ -206,7 +202,7 @@ class StompUtils(object):
         # Skip any leading newlines
         first_line = 0
         while first_line < preamble_len and len(preamble_lines[first_line
-                ]) == 0:
+                                                               ]) == 0:
             first_line += 1
 
         if first_line >= preamble_len:
@@ -333,3 +329,6 @@ class StompUtils(object):
             return e.errno
         except AttributeError:
             return e.args[0]
+
+    ENC_NEWLINE = encode.__func__("\n")
+    ENC_NULL = encode.__func__(NULL)

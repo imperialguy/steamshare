@@ -2,6 +2,8 @@ from steamshare.webstomp.utils import (
     StompUtils,
     StompFrame
 )
+import random
+import trio
 
 
 class StompProtocolManager(object):
@@ -10,20 +12,21 @@ class StompProtocolManager(object):
     (see https://stomp.github.io/stomp-specification-1.2.html).
 
     """
+
     def __init__(self,
-                logger,
-                user,
-                password,
-                vhost,
-                heartbeats=(0, 0),
-                auto_content_length=True,
-                heart_beat_receive_scale=1.5,
-                headers=None,
-                ping_interval=1,
-                auto_decode=True,
-                encoding="utf-8",
-                is_eol_fc=StompUtils.is_eol_default
-                ):
+                 logger,
+                 user,
+                 password,
+                 vhost,
+                 heartbeats=(0, 0),
+                 auto_content_length=True,
+                 heart_beat_receive_scale=1.5,
+                 headers=None,
+                 ping_interval=1,
+                 auto_decode=True,
+                 encoding="utf-8",
+                 is_eol_fc=StompUtils.is_eol_default
+                 ):
         self.logger = logger
         self.user = user
         self.password = password
@@ -66,7 +69,7 @@ class StompProtocolManager(object):
         for key, val in headers.items():
             try:
                 val = val.replace("\\", "\\\\").replace("\n", "\\n").replace(
-                        ":", "\\c").replace("\r", "\\r")
+                    ":", "\\c").replace("\r", "\\r")
             except:
                 pass
             headers[key] = val
@@ -104,7 +107,7 @@ class StompProtocolManager(object):
         return self.send_frame(StompUtils.CMD_NACK, headers)
 
     def connect(self, user=None, password=None, vhost=None, headers=None,
-            **keyword_headers):
+                **keyword_headers):
         """
         Send a STOMP CONNECT frame. Differs from 1.0 and 1.1 versions in that
         the HOST header is enforced.
@@ -216,7 +219,7 @@ class StompProtocolManager(object):
         return self.send_frame(StompUtils.CMD_ABORT, headers)
 
     def send(self, destination, body, content_type=None, headers=None,
-        **keyword_headers):
+             **keyword_headers):
         """
         Send a message to a destination in the messaging system
         (as per https://stomp.github.io/stomp-specification-1.2.html#SEND)
@@ -240,7 +243,7 @@ class StompProtocolManager(object):
         return self.send_frame(StompUtils.CMD_SEND, headers, body)
 
     def subscribe(self, destination, id=None, ack="client", headers=None,
-                **keyword_headers):
+                  **keyword_headers):
         """
         Subscribe to a destination
 
@@ -258,7 +261,7 @@ class StompProtocolManager(object):
         headers[StompUtils.HDR_DESTINATION] = destination
         headers[StompUtils.HDR_ID] = id if id else random.randint(1, 1000)
         headers[StompUtils.HDR_ACK] = ack
-        return id, self.send_frame(StompUtils.CMD_SUBSCRIBE, headers)
+        return self.send_frame(StompUtils.CMD_SUBSCRIBE, headers)
 
     def unsubscribe(self, id, headers=None, **keyword_headers):
         """
