@@ -43,7 +43,8 @@ from prefect.utilities.configuration import set_temporary_config
 from prefect.utilities.notifications import callback_factory
 from prefect.utilities.tasks import as_task, unmapped
 
-ParameterDetails = TypedDict("ParameterDetails", {"default": Any, "required": bool})
+ParameterDetails = TypedDict(
+    "ParameterDetails", {"default": Any, "required": bool})
 
 
 def cache(method: Callable) -> Callable:
@@ -68,7 +69,8 @@ def cache(method: Callable) -> Callable:
             self._cache.clear()
             self._cache.update(cache_check)
 
-        callargs = inspect.signature(method).bind(self, *args, **kwargs).arguments
+        callargs = inspect.signature(method).bind(
+            self, *args, **kwargs).arguments
         key = (method.__name__, tuple(callargs.items())[1:])
         if key not in self._cache:
             self._cache[key] = method(self, *args, **kwargs)
@@ -139,7 +141,7 @@ class Flow:
     def __init__(
         self,
         name: str,
-        publisher,
+        publisher=None,
         schedule: prefect.schedules.Schedule = None,
         environment: Environment = None,
         storage: Storage = None,
@@ -284,7 +286,8 @@ class Flow:
             - ValueError: if the `old` task is not a part of this flow
         """
         if old not in self.tasks:
-            raise ValueError("Task {t} was not found in Flow {f}".format(t=old, f=self))
+            raise ValueError(
+                "Task {t} was not found in Flow {f}".format(t=old, f=self))
 
         new = as_task(new, flow=self)
 
@@ -681,12 +684,14 @@ class Flow:
         if any(e.upstream_task not in self.tasks for e in self.edges) or any(
             e.downstream_task not in self.tasks for e in self.edges
         ):
-            raise ValueError("Some edges refer to tasks not contained in this flow.")
+            raise ValueError(
+                "Some edges refer to tasks not contained in this flow.")
 
         self.sorted_tasks()
 
         if any(t not in self.tasks for t in self.reference_tasks()):
-            raise ValueError("Some reference tasks are not contained in this flow.")
+            raise ValueError(
+                "Some reference tasks are not contained in this flow.")
 
     def sorted_tasks(self, root_tasks: Iterable[Task] = None) -> Tuple[Task, ...]:
         """
@@ -818,7 +823,8 @@ class Flow:
         for t in downstream_tasks or []:
             t = as_task(t, flow=self)
             assert isinstance(t, Task)  # mypy assert
-            self.add_edge(upstream_task=task, downstream_task=t, validate=validate)
+            self.add_edge(upstream_task=task,
+                          downstream_task=t, validate=validate)
 
         # add data edges to upstream tasks
         for key, t in (keyword_tasks or {}).items():
@@ -863,20 +869,22 @@ class Flow:
 
         base_parameters = parameters or dict()
 
-        ## determine time of first run
+        # determine time of first run
         try:
             if run_on_schedule and self.schedule is not None:
                 next_run_event = self.schedule.next(1, return_events=True)[0]
                 next_run_time = next_run_event.start_time  # type: ignore
                 parameters = base_parameters.copy()
-                parameters.update(next_run_event.parameter_defaults)  # type: ignore
+                parameters.update(
+                    next_run_event.parameter_defaults)  # type: ignore
             else:
                 next_run_time = pendulum.now("utc")
         except IndexError:
             raise ValueError("Flow has no more scheduled runs.") from None
 
-        ## setup initial states
-        flow_state = prefect.engine.state.Scheduled(start_time=next_run_time, result={})
+        # setup initial states
+        flow_state = prefect.engine.state.Scheduled(
+            start_time=next_run_time, result={})
         flow_state = kwargs.pop("state", flow_state)
         if not isinstance(flow_state.result, dict):
             flow_state.result = {}
@@ -888,8 +896,7 @@ class Flow:
             "context", {}
         ).copy()  # copy to avoid modification
 
-
-        ## run this flow indefinitely, so long as its schedule has future dates
+        # run this flow indefinitely, so long as its schedule has future dates
         while True:
 
             flow_run_context.update(scheduled_start_time=next_run_time)
@@ -900,14 +907,14 @@ class Flow:
                 naptime = max((next_run_time - now).total_seconds(), 0)
                 if naptime > 0:
                     self.log_publisher(
-                        "Waiting for next scheduled run at {}".format(next_run_time), 'info'
+                        "Waiting for next scheduled run at {}".format(
+                            next_run_time), 'info'
                     )
                 time.sleep(naptime)
 
             error = False
 
-
-            ## begin a single flow run
+            # begin a single flow run
             while not flow_state.is_finished():
                 runner = runner_cls(flow=self)
                 flow_state = runner.run(
@@ -934,7 +941,7 @@ class Flow:
                     default=pendulum.now("utc"),
                 )
 
-                ## wait until first task is ready for retry
+                # wait until first task is ready for retry
                 now = pendulum.now("utc")
                 naptime = max((earliest_start - now).total_seconds(), 0)
                 if naptime > 0:
@@ -945,7 +952,7 @@ class Flow:
                     )
                 time.sleep(naptime)
 
-            ## create next scheduled run
+            # create next scheduled run
             if not error:
                 # update context cache
                 for t, s in flow_state.result.items():
@@ -973,10 +980,12 @@ class Flow:
 
             try:
                 if run_on_schedule and self.schedule is not None:
-                    next_run_event = self.schedule.next(1, return_events=True)[0]
+                    next_run_event = self.schedule.next(
+                        1, return_events=True)[0]
                     next_run_time = next_run_event.start_time  # type: ignore
                     parameters = base_parameters.copy()
-                    parameters.update(next_run_event.parameter_defaults)  # type: ignore
+                    parameters.update(
+                        next_run_event.parameter_defaults)  # type: ignore
                 else:
                     break
             except IndexError:
@@ -1158,7 +1167,8 @@ class Flow:
                             str(id(t)) + str(map_index), name, shape=shape, **kwargs
                         )
                 else:
-                    kwargs = dict(color=get_color(t), style="filled", colorscheme="svg")
+                    kwargs = dict(color=get_color(
+                        t), style="filled", colorscheme="svg")
                     graph.node(str(id(t)), name, shape=shape, **kwargs)
             else:
                 kwargs = (
@@ -1194,7 +1204,7 @@ class Flow:
                         e.key,
                         style=style,
                     )
-            ## this edge represents a "reduce" step from a mapped task -> normal task
+            # this edge represents a "reduce" step from a mapped task -> normal task
             elif flow_state and flow_state.result[e.upstream_task].is_mapped():
                 assert isinstance(flow_state.result, dict)  # mypy assert
                 up_state = flow_state.result[e.upstream_task]
@@ -1303,7 +1313,8 @@ class Flow:
                 or the name of the Flow you wish to load
         """
         if not os.path.isabs(fpath):
-            path = "{home}/flows".format(home=prefect.context.config.home_dir)  # type: ignore
+            # type: ignore
+            path = "{home}/flows".format(home=prefect.context.config.home_dir)
             fpath = Path(os.path.expanduser(path)) / "{}.prefect".format(  # type: ignore
                 slugify(fpath)
             )  # type: ignore
@@ -1323,7 +1334,8 @@ class Flow:
             - str: the full location the Flow was saved to
         """
         if fpath is None:
-            path = "{home}/flows".format(home=prefect.context.config.home_dir)  # type: ignore
+            # type: ignore
+            path = "{home}/flows".format(home=prefect.context.config.home_dir)
             fpath = Path(  # type: ignore
                 os.path.expanduser(path)  # type: ignore
             ) / "{}.prefect".format(  # type: ignore

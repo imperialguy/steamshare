@@ -447,7 +447,8 @@ class Task(metaclass=SignatureValidator):
 
         # this will raise an error if callargs weren't all provided
         signature = inspect.signature(self.run)
-        callargs = dict(signature.bind(*args, **kwargs).arguments)  # type: Dict
+        callargs = dict(signature.bind(
+            *args, **kwargs).arguments)  # type: Dict
 
         # bind() compresses all variable keyword arguments under the ** argument name,
         # so we expand them explicitly
@@ -586,9 +587,11 @@ class Task(metaclass=SignatureValidator):
         """
         if key is not None:
             keyword_tasks = {key: task}
-            self.set_dependencies(flow=flow, keyword_tasks=keyword_tasks, mapped=mapped)
+            self.set_dependencies(
+                flow=flow, keyword_tasks=keyword_tasks, mapped=mapped)
         else:
-            self.set_dependencies(flow=flow, upstream_tasks=[task], mapped=mapped)
+            self.set_dependencies(flow=flow, upstream_tasks=[
+                                  task], mapped=mapped)
 
     def set_downstream(
         self, task: "Task", flow: "Flow" = None, key: str = None, mapped: bool = False
@@ -613,7 +616,8 @@ class Task(metaclass=SignatureValidator):
                 flow=flow, keyword_tasks=keyword_tasks, mapped=mapped
             )  # type: ignore
         else:
-            task.set_dependencies(flow=flow, upstream_tasks=[self], mapped=mapped)
+            task.set_dependencies(flow=flow, upstream_tasks=[
+                                  self], mapped=mapped)
 
     def inputs(self) -> Dict[str, Dict]:
         """
@@ -1117,17 +1121,19 @@ class Parameter(Task):
 
         flow = prefect.context.get("flow", None)
 
-        if flow:
+        if flow and flow.publisher:
             flow.publisher.publish(message, True)
 
     def run(self) -> Any:
         params = prefect.context.get("parameters") or {}
         if self.required and self.name not in params:
             self.log_publisher(
-                'Parameter "{}" was required but not provided.'.format(self.name)
+                'Parameter "{}" was required but not provided.'.format(
+                    self.name)
             )
             raise prefect.engine.signals.FAIL(
-                'Parameter "{}" was required but not provided.'.format(self.name)
+                'Parameter "{}" was required but not provided.'.format(
+                    self.name)
             )
         return params.get(self.name, self.default)
 

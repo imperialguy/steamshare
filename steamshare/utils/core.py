@@ -4,22 +4,31 @@ from requests.adapters import HTTPAdapter
 import requests
 import re
 
+
+class StaticCore(object):
+    @staticmethod
+    def get_state_tag(prefect_state):
+        pattern = '^<(\w*): (.*)>$'
+        matches = re.search(pattern, str(prefect_state))
+        return next(iter(matches.groups())).upper()
+
+
 class ClassicCore(object):
     def __init__(self, logger):
         self.logger = logger
 
     def requests_retry_session(self,
-                                retries,
-                                backoff_factor,
-                                status_forcelist,
-                                method_whitelist,
-                                ssl_verify,
-                                session=None):
+                               retries,
+                               backoff_factor,
+                               status_forcelist,
+                               method_whitelist,
+                               ssl_verify,
+                               session=None):
         self.logger.debug('Building a requests retry session with the '
-                    'following parameters\nretries: {}, backoff_factor: {}, '
-                    'status_forcelist: {}, method_whitelist: {}, '
-                    'ssl_verify: {}'.format(retries, backoff_factor,
-                    status_forcelist, method_whitelist, ssl_verify))
+                          'following parameters\nretries: {}, backoff_factor: {}, '
+                          'status_forcelist: {}, method_whitelist: {}, '
+                          'ssl_verify: {}'.format(retries, backoff_factor,
+                                                  status_forcelist, method_whitelist, ssl_verify))
         session = session or requests.Session()
         session.verify = ssl_verify
         retry = Retry(
@@ -37,22 +46,21 @@ class ClassicCore(object):
 
         return session
 
-
     def retrying_request(self,
-                        request_type,
-                        url,
-                        timeout,
-                        retries,
-                        backoff_factor,
-                        method_whitelist,
-                        status_forcelist,
-                        expected_status_code,
-                        data=None,
-                        headers=None,
-                        proxies=None,
-                        authentication=None,
-                        ssl_verify=False,
-                        is_json=True):
+                         request_type,
+                         url,
+                         timeout,
+                         retries,
+                         backoff_factor,
+                         method_whitelist,
+                         status_forcelist,
+                         expected_status_code,
+                         data=None,
+                         headers=None,
+                         proxies=None,
+                         authentication=None,
+                         ssl_verify=False,
+                         is_json=True):
         request_params = dict()
 
         request_params.update(dict(timeout=timeout))
@@ -67,19 +75,18 @@ class ClassicCore(object):
         if proxies:
             request_params.update(dict(proxies=proxies))
 
-
         if authentication:
             request_params.update(dict(auth=authentication))
 
         session = self.requests_retry_session(retries,
-                                         backoff_factor,
-                                         status_forcelist,
-                                         method_whitelist,
-                                         ssl_verify)
+                                              backoff_factor,
+                                              status_forcelist,
+                                              method_whitelist,
+                                              ssl_verify)
 
         try:
             self.logger.debug('request_type: {} url: {}'.format(request_type,
-            url))
+                                                                url))
             response = session.request(request_type, url, **request_params)
         except Exception as e:
             self.logger.debug(
@@ -90,22 +97,21 @@ class ClassicCore(object):
         else:
             if response.status_code >= 400:
                 self.logger.debug('{} request to {} failed (status_code: {})'
-                             ' with the reason: {} and the following'
-                             ' unexpected response:\n\n{}'.format(
-                                                 request_type, url,
-                                                response.status_code,
-                                                response.reason,
-                                                response.content))
+                                  ' with the reason: {} and the following'
+                                  ' unexpected response:\n\n{}'.format(
+                                      request_type, url,
+                                      response.status_code,
+                                      response.reason,
+                                      response.content))
                 raise RequestLauncherError(response.status_code,
-                                            response.reason
-                                            )
+                                           response.reason
+                                           )
             else:
                 self.logger.debug('{} request to {} is successful with the'
-                                ' following response\n{}'.format(
-                                request_type, url, response.text))
+                                  ' following response\n{}'.format(
+                                      request_type, url, response.text))
 
             return response
-
 
 
 class ObjectDict(dict):

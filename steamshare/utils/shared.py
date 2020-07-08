@@ -9,7 +9,7 @@ from dateutil import tz
 import datetime
 import tornado.ioloop
 # import multiprocessing.managers
-# import multiprocessing_logging
+import multiprocessing_logging
 import multiprocessing
 import threading
 import traceback
@@ -138,6 +138,10 @@ class StaticShared(object):
             raise SystemError("PyThreadState_SetAsyncExc failed")
 
     @staticmethod
+    def get_process_manager():
+        return multiprocessing.Manager()
+
+    @staticmethod
     def load_resource(filename, engine=None):
         """ Load resource file
 
@@ -192,8 +196,8 @@ class StaticShared(object):
             formatter = '[%(asctime)s] [p%(process)s] {%(pathname)s:%(lineno'\
                 ')d} [%(levelname)s] %(message)s'
 
-        # xformatter = logging.Formatter(formatter)
-        logging.basicConfig(format=formatter)
+        xformatter = logging.Formatter(formatter)
+        # logging.basicConfig(format=formatter)
         xlogger = logging.getLogger(filename)
 
         handler = logging.FileHandler(log_file_name, mode=log_file_mode
@@ -201,9 +205,9 @@ class StaticShared(object):
             logging.StreamHandler(sys.stdout)
         # handler.set_name(filename)
         # handler.setLevel(log_level)
-        # handler.setFormatter(xformatter)
+        handler.setFormatter(xformatter)
 
-        # xlogger.addHandler(handler)
+        xlogger.addHandler(handler)
         xlogger.setLevel(log_level)
         # xlogger.setFormatter(xformatter)
 

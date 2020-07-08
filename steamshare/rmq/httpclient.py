@@ -9,7 +9,7 @@ urllib3.disable_warnings()
 
 class RMQHTTPClient(object):
     def __init__(self, logger, root_url, vhost, user, password,
-            ssl_verify=False):
+                 ssl_verify=False):
         self.logger = logger
         self.api_url = self.build_url(root_url, 'api')
         self.vhost = vhost
@@ -31,20 +31,20 @@ class RMQHTTPClient(object):
         self.healthchecks_base_url = self.form_url('healthchecks')
 
     def retrying_rmq_api_request(self,
-                                request_type,
-                                url,
-                                timeout=None,
-                                retries=None,
-                                backoff_factor=None,
-                                method_whitelist=None,
-                                status_forcelist=None,
-                                expected_status_code=200,
-                                data=None,
-                                headers=None,
-                                proxies=None,
-                                user=None,
-                                password=None,
-                                ssl_verify=False):
+                                 request_type,
+                                 url,
+                                 timeout=None,
+                                 retries=None,
+                                 backoff_factor=None,
+                                 method_whitelist=None,
+                                 status_forcelist=None,
+                                 expected_status_code=200,
+                                 data=None,
+                                 headers=None,
+                                 proxies=None,
+                                 user=None,
+                                 password=None,
+                                 ssl_verify=False):
 
         timeout = 2.0
         retries = 1
@@ -72,9 +72,9 @@ class RMQHTTPClient(object):
 
     def make_request(self, url, method, data=None):
         return self.retrying_rmq_api_request(method, url, user=self.user,
-                                        password=self.password,
-                                        ssl_verify=self.ssl_verify,
-                                        data=data)
+                                             password=self.password,
+                                             ssl_verify=self.ssl_verify,
+                                             data=data)
 
     @property
     def bindings(self):
@@ -127,24 +127,24 @@ class RMQHTTPClient(object):
         return self.make_request(self.url, 'GET')
 
     def create_permission(self, vhost=None, user=None, configure=True,
-                            write=True, read=True):
-        url = self.build_url(self.permissions_base_url, vhost if vhost else \
-            self.vhost, user if user else self.user)
+                          write=True, read=True):
+        url = self.build_url(self.permissions_base_url, vhost if vhost else
+                             self.vhost, user if user else self.user)
 
-        data = {'configure':'.*' if configure else '',
-                'write':'.*' if write else '',
-                'read':'.*' if read else ''}
+        data = {'configure': '.*' if configure else '',
+                'write': '.*' if write else '',
+                'read': '.*' if read else ''}
 
         return self.make_request(url, 'PUT', data=data)
 
     def create_tpermission(self, exchange, vhost=None, user=None,
-            configure=True, write=True, read=True):
-        url = self.build_url(self.permissions_base_url, vhost if vhost else \
-            self.vhost, user if user else self.user)
+                           configure=True, write=True, read=True):
+        url = self.build_url(self.permissions_base_url, vhost if vhost else
+                             self.vhost, user if user else self.user)
 
-        data = {'configure':'.*' if configure else '',
-                'write':'.*' if write else '',
-                'read':'.*' if read else ''}
+        data = {'configure': '.*' if configure else '',
+                'write': '.*' if write else '',
+                'read': '.*' if read else ''}
 
         return self.make_request(url, 'PUT', data=data)
 
@@ -152,9 +152,9 @@ class RMQHTTPClient(object):
         url = self.build_url(self.vhosts_base_url, name)
 
         data = {
-                'description': 'virtual host {}'.format(name),
-                'tags': 'accounts,production'
-                }
+            'description': 'virtual host {}'.format(name),
+            'tags': 'accounts,production'
+        }
 
         return self.make_request(url, 'PUT', data=data)
 
@@ -177,15 +177,15 @@ class RMQHTTPClient(object):
 
     def create_topic_exchange(self, name, vhost=None):
         return self.create_exchange(vhost if vhost else self.vhost, name,
-                'topic')
+                                    'topic')
 
     def create_exchange(self, name, etype, alternate_exchange=None,
-            vhost=None):
-        url = self.build_url(self.exchanges_base_url, vhost if vhost else \
-                self.vhost, name)
+                        vhost=None):
+        url = self.build_url(self.exchanges_base_url, vhost if vhost else
+                             self.vhost, name)
 
         arguments = {'alternate-exchange': alternate_exchange
-                        } if alternate_exchange else {}
+                     } if alternate_exchange else {}
 
         data = {'type': etype,
                 'auto_delete': False,
@@ -197,62 +197,62 @@ class RMQHTTPClient(object):
 
     def get_eeq_bindings(self, btype, exchange, eorq, vhost=None):
         param = 'q' if btype == 'eq' else 'e'
-        url = self.build_url(self.bindings_base_url, vhost if vhost else \
-                self.vhost, 'e', exchange, param, eorq)
+        url = self.build_url(self.bindings_base_url, vhost if vhost else
+                             self.vhost, 'e', exchange, param, eorq)
 
         return self.make_request(url, 'GET')
 
     def get_vhost_bindings(self, vhost=None):
-        url = self.build_url(self.bindings_base_url, vhost if vhost else \
-                self.vhost)
+        url = self.build_url(self.bindings_base_url, vhost if vhost else
+                             self.vhost)
 
         return self.make_request(url, 'GET')
 
     def get_vhost_queues(self, vhost=None):
-        url = self.build_url(self.queues_base_url, vhost if vhost else \
-                self.vhost)
+        url = self.build_url(self.queues_base_url, vhost if vhost else
+                             self.vhost)
 
         return self.make_request(url, 'GET')
 
     def get_vhost_exchanges(self, vhost=None):
-        url = self.build_url(self.exchanges_base_url, vhost if vhost else \
-                self.vhost)
+        url = self.build_url(self.exchanges_base_url, vhost if vhost else
+                             self.vhost)
 
         return self.make_request(url, 'GET')
 
     def get_vhost_consumers(self, vhost=None):
-        url = self.build_url(self.consumers_base_url, vhost if vhost else \
-                self.vhost)
+        url = self.build_url(self.consumers_base_url, vhost if vhost else
+                             self.vhost)
 
         return self.make_request(url, 'GET')
 
     def get_vhost_channels(self, vhost=None):
-        url = self.build_url(self.vhosts_base_url, vhost if vhost else \
-                self.vhost, 'channels')
+        url = self.build_url(self.vhosts_base_url, vhost if vhost else
+                             self.vhost, 'channels')
 
         return self.make_request(url, 'GET')
 
     def get_vhost_connections(self, vhost=None):
-        url = self.build_url(self.vhosts_base_url, vhost if vhost else \
-                self.vhost, 'connections')
+        url = self.build_url(self.vhosts_base_url, vhost if vhost else
+                             self.vhost, 'connections')
 
         return self.make_request(url, 'GET')
 
     def get_vhost_permissions(self, vhost=None):
-        url = self.build_url(self.vhosts_base_url, vhost if vhost else \
-                self.vhost, 'permissions')
+        url = self.build_url(self.vhosts_base_url, vhost if vhost else
+                             self.vhost, 'permissions')
 
         return self.make_request(url, 'GET')
 
     def get_user_permissions(self, user=None):
-        url = self.build_url(self.users_base_url, user if user else \
-                self.user, 'permissions')
+        url = self.build_url(self.users_base_url, user if user else
+                             self.user, 'permissions')
 
         return self.make_request(url, 'GET')
 
     def get_user_topic_permissions(self, user=None):
-        url = self.build_url(self.users_base_url, user if user else \
-                self.user, 'topic-permissions')
+        url = self.build_url(self.users_base_url, user if user else
+                             self.user, 'topic-permissions')
 
         return self.make_request(url, 'GET')
 
@@ -262,10 +262,10 @@ class RMQHTTPClient(object):
         return self.make_request(url, 'GET')
 
     def create_eeq_binding(self, btype, exchange, eorq, routing_key,
-            vhost=None, **kwargs):
+                           vhost=None, **kwargs):
         param = 'q' if btype == 'eq' else 'e'
-        url = self.build_url(self.bindings_base_url, vhost if vhost else \
-                    self.vhost, 'e', exchange, param, eorq)
+        url = self.build_url(self.bindings_base_url, vhost if vhost else
+                             self.vhost, 'e', exchange, param, eorq)
         data = {}
         if routing_key:
             data['routing_key'] = routing_key
@@ -275,27 +275,27 @@ class RMQHTTPClient(object):
         return self.make_request(url, 'POST', data=data)
 
     def view_eeq_binding(self, btype, exchange, eorq, routing_key,
-            vhost=None):
+                         vhost=None):
         param = 'q' if btype == 'eq' else 'e'
-        url = self.build_url(self.bindings_base_url, vhost if vhost else \
-                    self.vhost, 'e', exchange, param, eorq, routing_key)
+        url = self.build_url(self.bindings_base_url, vhost if vhost else
+                             self.vhost, 'e', exchange, param, eorq, routing_key)
 
         return self.make_request(url, 'GET')
 
     def delete_eeq_binding(self, exchange, queue, routing_key, vhost=None):
         param = 'q' if btype == 'eq' else 'e'
-        url = self.build_url(self.bindings_base_url, vhost if vhost else \
-                    self.vhost, 'e', exchange, param, eorq, routing_key)
+        url = self.build_url(self.bindings_base_url, vhost if vhost else
+                             self.vhost, 'e', exchange, param, eorq, routing_key)
 
         return self.make_request(url, 'DELETE')
 
     def create_queue(self, name, node=None, vhost=None):
-        url = self.build_url(self.queues_base_url, vhost if vhost else \
-                    self.vhost, name)
+        url = self.build_url(self.queues_base_url, vhost if vhost else
+                             self.vhost, name)
 
         data = {'auto_delete': False,
                 'durable': True,
-                'arguments':{}
+                'arguments': {}
                 }
 
         if node:
@@ -304,16 +304,16 @@ class RMQHTTPClient(object):
         return self.make_request(url, 'PUT', data=data)
 
     def delete_queue(self, name, only_if_empty=True, vhost=None):
-        url = self.build_url(self.queues_base_url, vhost if vhost else \
-                    self.vhost, name)
+        url = self.build_url(self.queues_base_url, vhost if vhost else
+                             self.vhost, name)
 
         data = {'if-empty': True} if only_if_empty else None
 
         return self.make_request(url, 'DELETE', data=data)
 
     def purge_queue(self, name, vhost=None):
-        url = self.build_url(self.queues_base_url, vhost if vhost else \
-                    self.vhost, name, 'contents')
+        url = self.build_url(self.queues_base_url, vhost if vhost else
+                             self.vhost, name, 'contents')
 
         try:
             self.make_request(url, 'DELETE')
@@ -324,8 +324,8 @@ class RMQHTTPClient(object):
                 raise
 
     def view_queue(self, name, vhost=None):
-        url = self.build_url(self.queues_base_url, vhost if vhost else \
-                    self.vhost, name)
+        url = self.build_url(self.queues_base_url, vhost if vhost else
+                             self.vhost, name)
 
         return self.make_request(url, 'GET')
 
@@ -340,8 +340,8 @@ class RMQHTTPClient(object):
         return self.make_request(url, 'GET')
 
     def view_permission(self, user, vhost=None):
-        url = self.build_url(self.permissions_base_url, vhost if vhost else \
-                    self.vhost, user)
+        url = self.build_url(self.permissions_base_url, vhost if vhost else
+                             self.vhost, user)
 
         return self.make_request(url, 'GET')
 
@@ -356,27 +356,27 @@ class RMQHTTPClient(object):
         return self.make_request(url, 'GET')
 
     def view_exchange(self, exchange, vhost=None):
-        url = self.build_url(self.exchanges_base_url, vhost if vhost else \
-                    self.vhost, exchange)
+        url = self.build_url(self.exchanges_base_url, vhost if vhost else
+                             self.vhost, exchange)
 
         return self.make_request(url, 'GET')
 
     def consume_queue(self, name, max_num_messages, requeue=False,
-            vhost=None):
-        url = self.build_url(self.queues_base_url, vhost if vhost else \
-                    self.vhost, name, 'get')
+                      vhost=None):
+        url = self.build_url(self.queues_base_url, vhost if vhost else
+                             self.vhost, name, 'get')
 
         data = {'count': max_num_messages,
-                'ackmode':'ack_requeue_true' if requeue else \
-                    'ack_requeue_false',
-                'encoding':'auto', 'truncate': 50000}
+                'ackmode': 'ack_requeue_true' if requeue else
+                'ack_requeue_false',
+                'encoding': 'auto', 'truncate': 50000}
 
         return self.make_request(url, 'POST', data=data)
 
     def publish_to_exchange(self, exchange, routing_key, message,
-            time_formatter=False, vhost=None):
-        url = self.build_url(self.exchanges_base_url, vhost if vhost else \
-                    self.vhost, exchange, 'publish')
+                            time_formatter=False, vhost=None):
+        url = self.build_url(self.exchanges_base_url, vhost if vhost else
+                             self.vhost, exchange, 'publish')
 
         if time_formatter:
             formatter = pendulum.now("utc")
@@ -396,20 +396,20 @@ class RMQHTTPClient(object):
         self.make_request(url, 'DELETE')
 
     def delete_permission(self, user, vhost=None):
-        url = self.build_url(self.permissions_base_url, vhost if vhost else \
-                    self.vhost, user)
+        url = self.build_url(self.permissions_base_url, vhost if vhost else
+                             self.vhost, user)
 
         self.make_request(url, 'DELETE')
 
     def delete_vhost(self, vhost=None):
-        url = self.build_url(self.vhosts_base_url, vhost if vhost else \
-                    self.vhost)
+        url = self.build_url(self.vhosts_base_url, vhost if vhost else
+                             self.vhost)
 
         self.make_request(url, 'DELETE')
 
     def delete_user(self, user=None):
-        url = self.build_url(self.users_base_url, user if user else \
-                    self.user)
+        url = self.build_url(self.users_base_url, user if user else
+                             self.user)
 
         self.make_request(url, 'DELETE')
 

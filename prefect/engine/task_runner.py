@@ -52,9 +52,9 @@ from prefect.utilities.executors import (
 )
 
 
-
 TaskRunnerInitializeResult = NamedTuple(
-    "TaskRunnerInitializeResult", [("state", State), ("context", Dict[str, Any])]
+    "TaskRunnerInitializeResult", [
+        ("state", State), ("context", Dict[str, Any])]
 )
 
 
@@ -109,7 +109,6 @@ class TaskRunner(Runner):
     def __repr__(self) -> str:
         return "<{}: {}>".format(type(self).__name__, self.task.name)
 
-
     def log_publisher(self, message, level='debug'):
         if level == 'debug':
             self.logger.debug(message)
@@ -120,7 +119,7 @@ class TaskRunner(Runner):
 
         flow = prefect.context.get("flow", None)
 
-        if flow:
+        if flow and flow.publisher:
             flow.publisher.publish(message, True)
 
     def call_runner_target_handlers(self, old_state: State, new_state: State) -> State:
@@ -178,7 +177,8 @@ class TaskRunner(Runner):
         if "_loop_count" in state.cached_inputs:  # type: ignore
             loop_result = state.cached_inputs.pop("_loop_result")
             if loop_result.value is None and loop_result.location is not None:
-                loop_result_value = self.result.read(loop_result.location).value
+                loop_result_value = self.result.read(
+                    loop_result.location).value
             else:
                 loop_result_value = loop_result.value
             loop_context = {
@@ -300,10 +300,11 @@ class TaskRunner(Runner):
                         executor=executor,
                     )
 
-                    state = self.wait_for_mapped_task(state=state, executor=executor)
+                    state = self.wait_for_mapped_task(
+                        state=state, executor=executor)
 
                     self.log_publisher("Task '{name}': task has been mapped; ending run.".format(
-                            name=context["task_full_name"]))
+                        name=context["task_full_name"]))
 
                     raise ENDRUN(state)
 
@@ -317,12 +318,14 @@ class TaskRunner(Runner):
                     state = self.check_target(state, inputs=task_inputs)
                 else:
                     # check to see if the task has a cached result
-                    state = self.check_task_is_cached(state, inputs=task_inputs)
+                    state = self.check_task_is_cached(
+                        state, inputs=task_inputs)
 
                 # check if the task's trigger passes
                 # triggers can raise Pauses, which require task_inputs to be available for caching
                 # so we run this after the previous step
-                state = self.check_task_trigger(state, upstream_states=upstream_states)
+                state = self.check_task_trigger(
+                    state, upstream_states=upstream_states)
 
                 # set the task state to running
                 state = self.set_task_to_running(state, inputs=task_inputs)
@@ -372,7 +375,8 @@ class TaskRunner(Runner):
             with prefect.context(context):
                 self.log_publisher(
                     "Task '{name}': finished task run for task with final state: '{state}'".format(
-                        name=context["task_full_name"], state=type(state).__name__
+                        name=context["task_full_name"], state=type(
+                            state).__name__
                     ), 'info'
                 )
 
@@ -695,7 +699,8 @@ class TaskRunner(Runner):
             sanitized_inputs = {key: res.value for key, res in inputs.items()}
             for candidate in candidate_states:
                 if self.task.cache_validator(
-                    candidate, sanitized_inputs, prefect.context.get("parameters")
+                    candidate, sanitized_inputs, prefect.context.get(
+                        "parameters")
                 ):
                     return candidate
 
@@ -756,7 +761,8 @@ class TaskRunner(Runner):
                     # Note that these "states" might actually be futures at this time; we aren't
                     # blocking until they finish.
                     elif edge.mapped and upstream_state.is_mapped():
-                        states[edge] = upstream_state.map_states[i]  # type: ignore
+                        # type: ignore
+                        states[edge] = upstream_state.map_states[i]
 
                     # Otherwise, we are mapping over the result of a "vanilla" task. In this
                     # case, we create a copy of the upstream state but set the result to the
@@ -776,7 +782,8 @@ class TaskRunner(Runner):
                                 raise TypeError(
                                     "Cannot map over unsubscriptable object of type {t}: {preview}...".format(
                                         t=type(upstream_state.result),
-                                        preview=repr(upstream_state.result)[:10],
+                                        preview=repr(upstream_state.result)[
+                                            :10],
                                     )
                                 )
                             upstream_result = upstream_state._result.from_value(  # type: ignore
@@ -810,25 +817,31 @@ class TaskRunner(Runner):
 
         # generate initial states, if available
         if isinstance(state, Mapped):
-            initial_states = list(state.map_states)  # type: List[Optional[State]]
+            # type: List[Optional[State]]
+            initial_states = list(state.map_states)
         else:
             initial_states = []
-        initial_states.extend([None] * (len(map_upstream_states) - len(initial_states)))
+        initial_states.extend(
+            [None] * (len(map_upstream_states) - len(initial_states)))
 
         current_state = Mapped(
-            message="Preparing to submit {} mapped tasks.".format(len(initial_states)),
+            message="Preparing to submit {} mapped tasks.".format(
+                len(initial_states)),
             map_states=initial_states,  # type: ignore
         )
-        state = self.handle_state_change(old_state=state, new_state=current_state)
+        state = self.handle_state_change(
+            old_state=state, new_state=current_state)
         if state is not current_state:
             return state
 
         # map over the initial states, a counter representing the map_index, and also the mapped upstream states
         map_states = executor.map(
-            run_fn, initial_states, range(len(map_upstream_states)), map_upstream_states
+            run_fn, initial_states, range(
+                len(map_upstream_states)), map_upstream_states
         )
 
-        self.log_publisher("{} mapped tasks submitted for execution.".format(len(map_states)))
+        self.log_publisher(
+            "{} mapped tasks submitted for execution.".format(len(map_states)))
         new_state = Mapped(
             message="Mapped tasks submitted for execution.", map_states=map_states
         )
@@ -871,9 +884,10 @@ class TaskRunner(Runner):
         """
         if not state.is_pending():
             self.log_publisher("Task '{name}': can't set state to Running because it "
-            "isn't Pending; ending run.".format(
-                name=prefect.context.get("task_full_name", self.task.name)
-            ))
+                               "isn't Pending; ending run.".format(
+                                   name=prefect.context.get(
+                                       "task_full_name", self.task.name)
+                               ))
             raise ENDRUN(state)
 
         new_state = Running(message="Starting task run.", cached_inputs=inputs)
@@ -908,9 +922,10 @@ class TaskRunner(Runner):
         """
         if not state.is_running():
             self.log_publisher("Task '{name}': can't run task because it's not in a "
-            "Running state; ending run.".format(
-                name=prefect.context.get("task_full_name", self.task.name)
-            ))
+                               "Running state; ending run.".format(
+                                   name=prefect.context.get(
+                                       "task_full_name", self.task.name)
+                               ))
 
             raise ENDRUN(state)
 
@@ -925,7 +940,8 @@ class TaskRunner(Runner):
             raw_inputs = {k: r.value for k, r in inputs.items()}
 
             if getattr(self.task, "log_stdout", False):
-                with redirect_stdout(prefect.utilities.logging.RedirectToLog(self.logger)):  # type: ignore
+                # type: ignore
+                with redirect_stdout(prefect.utilities.logging.RedirectToLog(self.logger)):
                     result = timeout_handler(
                         self.task.run, timeout=self.task.timeout, **raw_inputs
                     )
@@ -936,7 +952,8 @@ class TaskRunner(Runner):
 
         except KeyboardInterrupt:
             self.log_publisher("Interrupt signal raised, cancelling task run.")
-            state = Cancelled(message="Interrupt signal raised, cancelling task run.")
+            state = Cancelled(
+                message="Interrupt signal raised, cancelling task run.")
             return state
 
         # inform user of timeout
@@ -958,14 +975,15 @@ class TaskRunner(Runner):
             )
             return new_state
 
-        ## checkpoint tasks if a result is present, except for when the user has opted out by disabling checkpointing
+        # checkpoint tasks if a result is present, except for when the user has opted out by disabling checkpointing
         if (
             prefect.context.get("checkpointing") is True
             and self.task.checkpoint is not False
             and value is not None
         ):
             try:
-                result = self.result.write(value, filename="output", **prefect.context)
+                result = self.result.write(
+                    value, filename="output", **prefect.context)
             except NotImplementedError:
                 result = self.result.from_value(value=value)
         else:
@@ -1036,7 +1054,7 @@ class TaskRunner(Runner):
                     value=prefect.context.get("task_loop_result")
                 )
 
-                ## checkpoint tasks if a result is present, except for when the user has opted out by disabling checkpointing
+                # checkpoint tasks if a result is present, except for when the user has opted out by disabling checkpointing
                 if (
                     prefect.context.get("checkpointing") is True
                     and self.task.checkpoint is not False
@@ -1052,7 +1070,8 @@ class TaskRunner(Runner):
 
                 loop_context = {
                     "_loop_count": PrefectResult(
-                        location=json.dumps(prefect.context["task_loop_count"]),
+                        location=json.dumps(
+                            prefect.context["task_loop_count"]),
                     ),
                     "_loop_result": loop_result,
                 }
@@ -1108,7 +1127,8 @@ class TaskRunner(Runner):
                     "task_loop_count": state.loop_count + 1,
                 }
             )
-            context.update(task_run_version=prefect.context.get("task_run_version"))
+            context.update(
+                task_run_version=prefect.context.get("task_run_version"))
             new_state = Pending(message=msg, cached_inputs=inputs)
             raise RecursiveCall(
                 self.run,
