@@ -46,7 +46,7 @@ class RMQHTTPClient(object):
                                  password=None,
                                  ssl_verify=False):
 
-        timeout = 2.0
+        timeout = 60.0
         retries = 1
         backoff_factor = 0.001
         # method_whitelist = method_whitelist or config.defaults.method_whitelist
@@ -176,8 +176,8 @@ class RMQHTTPClient(object):
         return self.make_request(url, 'PUT', data=data)
 
     def create_topic_exchange(self, name, vhost=None):
-        return self.create_exchange(vhost if vhost else self.vhost, name,
-                                    'topic')
+        return self.create_exchange(name, 'topic',
+                                    vhost=vhost if vhost else self.vhost)
 
     def create_exchange(self, name, etype, alternate_exchange=None,
                         vhost=None):
@@ -289,13 +289,13 @@ class RMQHTTPClient(object):
 
         return self.make_request(url, 'DELETE')
 
-    def create_queue(self, name, node=None, vhost=None):
+    def create_queue(self, name, node=None, vhost=None, args={}):
         url = self.build_url(self.queues_base_url, vhost if vhost else
                              self.vhost, name)
 
         data = {'auto_delete': False,
                 'durable': True,
-                'arguments': {}
+                'arguments': args
                 }
 
         if node:

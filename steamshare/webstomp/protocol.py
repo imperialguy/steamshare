@@ -18,7 +18,7 @@ class StompProtocolManager(object):
                  user,
                  password,
                  vhost,
-                 heartbeats=(0, 0),
+                 heartbeats,
                  auto_content_length=True,
                  heart_beat_receive_scale=1.5,
                  headers=None,
@@ -32,10 +32,11 @@ class StompProtocolManager(object):
         self.password = password
         self.vhost = vhost
         self.ping_interval = ping_interval
-        self.heartbeats = heartbeats
+        self.heartbeats = (heartbeats * 1000, heartbeats * 1000)
         self.heart_beat_receive_scale = heart_beat_receive_scale
         self.auto_content_length = auto_content_length
-        self.version = "1.2"
+        self.version = '1.2'
+        self.subscription_queues = {}
         self.__auto_decode = auto_decode
         self.__encoding = encoding
         self.__is_eol = is_eol_fc
@@ -59,8 +60,13 @@ class StompProtocolManager(object):
                 receipt_id))
 
     def mark_receipt_read(self, receipt_id):
-        self.logger.debug('Marking receipt id: {} as READ'.format(receipt_id))
-        self.receipts[receipt_id].set()
+        try:
+            self.receipts[receipt_id].set()
+        except KeyError:
+            pass
+        else:
+            self.logger.debug('Marked receipt id: {} as READ'.format(
+                receipt_id))
 
     def _escape_headers(self, headers):
         """
@@ -234,7 +240,7 @@ class StompProtocolManager(object):
         assert destination is not None, "'destination' is required"
         assert body is not None, "'body' is required"
         headers = StompUtils.merge_headers([headers, keyword_headers])
-        headers[StompUtils.HDR_DESTINATION] = destination
+        headers[StompUtils.HDR_DESTINATION] = '/queue/{}'.format(destination)
         if content_type:
             headers[StompUtils.HDR_CONTENT_TYPE] = content_type
         if self.auto_content_length and body and \

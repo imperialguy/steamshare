@@ -1,3 +1,10 @@
+from trio_websocket import (
+    open_websocket_url,
+    open_websocket,
+    ConnectionRejected,
+    ConnectionClosed,
+    HandshakeError
+)
 from steamshare.utils.shared import (
     ClassicShared,
     StaticShared
@@ -23,6 +30,7 @@ class WebSocketLib(object):
     async def unsubscriber(logger,
                            websocket,
                            id,
+                           queue,
                            timeout,
                            retries,
                            stomp_protocol_manager):
@@ -46,6 +54,10 @@ class WebSocketLib(object):
         if not unsubscribe_successful:
             logger.debug('Unsubscribe on queue {} failed after {} attempts'
                          ''.format(queue, retries))
+            return
+
+        logger.debug('Unsubscribe on queue {} SUCCESSFUL after {} attempts'
+                     ''.format(queue, n + 1))
 
     @staticmethod
     async def subscriber(
@@ -57,7 +69,8 @@ class WebSocketLib(object):
         retries,
         purge_before_subscribe,
         stomp_protocol_manager,
-        http_client
+        http_client,
+        auto_acknowledge=False
     ):
 
         if purge_before_subscribe:
@@ -68,7 +81,12 @@ class WebSocketLib(object):
         while n < retries:
             try:
                 logger.debug('Subscribe attempt #{}'.format(n + 1))
-                subscribe_cmd = stomp_protocol_manager.subscribe(queue, id)
+                if auto_acknowledge:
+                    subscribe_cmd = stomp_protocol_manager.subscribe(
+                        queue, id, ack='auto')
+                else:
+                    subscribe_cmd = stomp_protocol_manager.subscribe(queue,
+                                                                     id)
                 await WebSocketLib.sender(logger, websocket, subscribe_cmd,
                                           timeout)
             except Exception as e:
@@ -84,8 +102,11 @@ class WebSocketLib(object):
                          ''.format(queue, retries))
 
     @staticmethod
-    async def receiver(logger, websocket, timeout):
-        with trio.fail_after(timeout):
+    async def receiver(logger, websocket, timeout=None):
+        if timeout:
+            with trio.fail_after(timeout):
+                message = await websocket.get_message()
+        else:
             message = await websocket.get_message()
 
         frame = StompUtils.parse_frame(StompUtils.encode(message))
@@ -140,7 +161,62 @@ class WebSocketLib(object):
             await trio.sleep(interval)
 
     @staticmethod
-    async def connect(logger, websocket, cmd, timeout, interval,
+    async def disconnect(logger,
+                         websocket,
+                         cmd,
+                         timeout,
+                         interval,
+                         retry_attempts):
+        right_frame_type = False
+        n = 0
+        while not right_frame_type and n < retry_attempts:
+            try:
+                logger.debug('Disconnection attempt #{}'.format(n + 1))
+                await WebSocketLib.sender(logger, websocket, cmd, timeout)
+                frame = await WebSocketLib.receiver(logger, websocket,
+                                                    timeout)
+            except trio.TooSlowError:
+                fail_reason = 'disconection attempt timed out after {}'\
+                    ' seconds'.format(interval)
+            except exceptions.EmptyFrameException:
+                fail_reason = 'empty frame received'
+            except exceptions.ErrorFrameReceivedException as e:
+                fail_reason = 'following error frame received\n{}'.format(e)
+            except Exception as e:
+                fail_reason = 'following unexpected exception/error occured '\
+                    'while attempting to receive a message\n{}'.format(e)
+            else:
+                frame_cmd = frame.cmd.lower()
+                right_frame_type = frame_cmd == 'receipt' if frame \
+                    else right_frame_type
+                if right_frame_type:
+                    break
+                else:
+                    fail_reason = 'expecting a DISCONNECTED frame type, but '\
+                        'instead received the following frame type'\
+                        ': {}'.format(frame_cmd)
+
+            logger.debug('Protocol disconnection attempt failed due to the '
+                         'following reason: {}'.format(fail_reason))
+
+            logger.debug('Sleeping for {} seconds before the next  '
+                         'protocol disconnection attempt'.format(interval))
+
+            await trio.sleep(interval)
+
+            n += 1
+
+        # if not right_frame_type:
+        #     raise exceptions.DisconnectFailedException()
+        #
+        # logger.debug('Protocol disconnection SUCCESSFUL !!')
+
+    @staticmethod
+    async def connect(logger,
+                      websocket,
+                      cmd,
+                      timeout,
+                      interval,
                       retry_attempts):
         right_frame_type = False
         n = 0
@@ -192,13 +268,16 @@ class WebSocketLib(object):
         websocket,
         timeout,
         interval,
-        enable_protocol_heartbeat_logging
+        enable_protocol_heartbeat_logging,
+        heartbeat_queue,
+        stomp_protocol_manager
     ):
         while True:
-            with trio.fail_after(timeout):
-                if enable_protocol_heartbeat_logging:
-                    logger.debug('Sending empty heartbeat frame')
-                await websocket.send_message('')
+            message = stomp_protocol_manager.send(heartbeat_queue, '')
+            await WebSocketLib.sender(logger, websocket, message, timeout)
+            if enable_protocol_heartbeat_logging:
+                logger.debug('Sent empty heartbeat frame: {}'.format(
+                    message))
             await trio.sleep(interval)
 
     @staticmethod
@@ -224,6 +303,7 @@ class WebSocketLib(object):
         not_connected = True
         n = 0
         connect_cmd = stomp_protocol_manager.connect()
+        disconnect_receipt_id = StompUtils.get_uuid()
         while not_connected:
             logger.debug('Protocol major connection attempt {}'.format(n + 1))
             try:
@@ -253,7 +333,9 @@ class WebSocketLib(object):
         listener_timeout,
         disconnect_timeout,
         log_indefinite_listening_attempt,
-        stomp_protocol_manager
+        stomp_protocol_manager,
+        heartbeat_queue,
+        enable_protocol_heartbeat_logging
     ):
         logger.debug('Indefinite Listener started...')
         n = 0
@@ -261,17 +343,15 @@ class WebSocketLib(object):
             if log_indefinite_listening_attempt:
                 logger.debug('Indefinite Listening attempt #{}'.format(n + 1))
             try:
-                frame = await WebSocketLib.receiver(logger, websocket,
-                                                    listener_timeout)
+                frame = await WebSocketLib.receiver(logger, websocket)
                 (frame_type, frame_headers, frame_body) = (frame.cmd.lower(),
                                                            frame.headers,
                                                            frame.body)
             except trio.TooSlowError:
-                logger.error('Message receiver timed out\nIndefinite Listening'
-                             ' attempt halted')
-                break
+                logger.error('Message receiver timed out. Continuing...')
+                continue
             except exceptions.EmptyFrameException as e:
-                pass
+                logger.debug('Received empty frame')
             except exceptions.ErrorFrameReceivedException as e:
                 logger.error('Received following error frame \n{}\nIndefinite '
                              'Listening attempt halted!!!\n'.format(
@@ -283,8 +363,8 @@ class WebSocketLib(object):
                 await trio.sleep(arbitrary_wait_period)
                 raise
             except Exception as e:
-                logger.error('Receiver failed due to the following error\n{}\n'
-                             'Indefinite Listening attempt halted'.format(
+                logger.error('Receiver failed due to the following error\n{}'
+                             '\nIndefinite Listening attempt halted'.format(
                                  traceback.format_exc()))
                 break
             else:
@@ -294,26 +374,31 @@ class WebSocketLib(object):
                     message_queue = frame_headers['destination'].split(
                         '/')[-1]
                     message = frame.body
-                    logger.debug('RAW MESSAGE RECEIVED =====> {}'.format(
-                        message))
-                    formatted_message = StompUtils.decode(message.rstrip(
-
-                    ).rstrip(
-                        StompUtils.NULL))
-                    stomp_message = StompMessage(message_id,
-                                                 receipt_id,
-                                                 formatted_message,
-                                                 message_queue)
-                    nursery.start_soon(
-                        processor,
-                        websocket,
-                        nursery,
-                        stomp_message
-                    )
+                    if message_queue == heartbeat_queue:
+                        if enable_protocol_heartbeat_logging:
+                            logger.debug('Message received from heartbeat '
+                                         'queue. Assuming auto '
+                                         'acknowledgement by server')
+                    else:
+                        logger.debug('RAW MESSAGE RECEIVED =====> {}'.format(
+                            message))
+                        formatted_message = StompUtils.decode(message.rstrip(
+                        ).rstrip(StompUtils.NULL))
+                        stomp_message = StompMessage(message_id,
+                                                     receipt_id,
+                                                     formatted_message,
+                                                     message_queue)
+                        nursery.start_soon(
+                            processor,
+                            websocket,
+                            nursery,
+                            stomp_message
+                        )
                 elif frame_type == 'receipt':
                     receipt_id = frame_headers['receipt-id']
                     stomp_protocol_manager.mark_receipt_read(receipt_id)
             n += 1
+            await trio.sleep(arbitrary_wait_period)
 
     @staticmethod
     async def acknowledge(logger,
@@ -324,10 +409,13 @@ class WebSocketLib(object):
                           send_timeout,
                           receipt_timeout,
                           send_retries,
-                          receipt_retries
+                          receipt_retries,
+                          send_retry_wait,
+                          receipt_retry_wait
                           ):
         ack_msg = stomp_protocol_manager.ack(message_id, receipt_id)
         acknowledgement_received_by_server = False
+        acknowledgement_sent = False
 
         n = 0
         while not acknowledgement_received_by_server and \
@@ -337,7 +425,7 @@ class WebSocketLib(object):
 
             logger.debug(
                 'Server acknowledgement major attempt #{}'.format(n + 1))
-            acknowledgement_received_by_server = await \
+            acknowledgement_sent, acknowledgement_received_by_server = await \
                 WebSocketLib.acknowledgement_sender(
                     logger,
                     websocket,
@@ -347,7 +435,12 @@ class WebSocketLib(object):
                     stomp_protocol_manager,
                     send_timeout,
                     receipt_timeout,
-                    send_retries)
+                    send_retries,
+                    send_retry_wait,
+                    acknowledgement_sent,
+                    acknowledgement_received_by_server
+                )
+            await trio.sleep(receipt_retry_wait)
             n += 1
 
         stomp_protocol_manager.delete_receipt(receipt_id)
@@ -374,10 +467,10 @@ class WebSocketLib(object):
                                      stomp_protocol_manager,
                                      send_timeout,
                                      receipt_timeout,
-                                     send_retries):
-        acknowledgement_sent = False
-        acknowledgement_received_by_server = False
-
+                                     send_retries,
+                                     send_retry_wait,
+                                     acknowledgement_sent,
+                                     acknowledgement_received_by_server):
         n = 0
         while not acknowledgement_sent and n < send_retries:
             try:
@@ -391,12 +484,14 @@ class WebSocketLib(object):
                     'Acknowledgement message send failed due to timeout')
             else:
                 acknowledgement_sent = True
+            await trio.sleep(send_retry_wait)
             n += 1
 
         if acknowledgement_sent:
-            logger.debug('Acknowledgement message sent to server successfully'
-                         ' for message id {} after {} attempts'.format(
-                             message_id, n))
+            if n > 0:
+                logger.debug('Acknowledgement message sent to server '
+                             'successfully for message id {} after {} '
+                             'attempts'.format(message_id, n))
 
             try:
                 with trio.fail_after(receipt_timeout):
@@ -414,7 +509,7 @@ class WebSocketLib(object):
                                  message_id,
                                  receipt_id))
 
-        return acknowledgement_received_by_server
+        return acknowledgement_sent, acknowledgement_received_by_server
 
     @staticmethod
     async def mass_subscriber(logger,
@@ -422,6 +517,8 @@ class WebSocketLib(object):
                               nursery,
                               subscription_queues,
                               subscriber_id_generator,
+                              unsubscriber_timeout,
+                              unsubscriber_retries,
                               subscriber_timeout,
                               subscriber_retries,
                               purge_before_subscribe,
@@ -430,11 +527,16 @@ class WebSocketLib(object):
         for queue in subscription_queues:
             logger.debug('Mass Subscriber: Subscribing to queue =--> {}'
                          ''.format(queue))
+            stomp_protocol_manager.subscription_queues[
+                queue] = subscription_id = next(
+                    subscriber_id_generator)
+            logger.debug('Subscribing to queue {} subscription id: {}'
+                         ''.format(queue, subscription_id))
             nursery.start_soon(
                 WebSocketLib.subscriber,
                 logger,
                 websocket,
-                next(subscriber_id_generator),
+                subscription_id,
                 queue,
                 subscriber_timeout,
                 subscriber_retries,
@@ -445,32 +547,60 @@ class WebSocketLib(object):
 
     async def websocket_runner(logger,
                                url,
+                               host,
+                               port,
                                ssl_context,
+                               message_queue_size,
                                arbitrary_wait_period,
                                websocket_ping_timeout,
                                websocket_ping_interval,
                                enable_websocket_heartbeat_logging,
-                               webstomp_runner
+                               webstomp_runner,
+                               use_port
                                ):
-        async with open_websocket_url(url,
-                                      ssl_context=ssl_context
+        if use_port:
+            async with open_websocket(host=host,
+                                      port=port,
+                                      resource='/ws',
+                                      use_ssl=False,
+                                      message_queue_size=message_queue_size
                                       ) as websocket:
-            await trio.sleep(arbitrary_wait_period)
-            async with trio.open_nursery() as nursery:
-                nursery.start_soon(
-                    WebSocketLib.websocket_heartbeat,
-                    logger,
-                    websocket,
-                    websocket_ping_timeout,
-                    websocket_ping_interval,
-                    enable_websocket_heartbeat_logging
-                )
-                nursery.start_soon(webstomp_runner, websocket, nursery)
+                await trio.sleep(arbitrary_wait_period)
+                async with trio.open_nursery() as nursery:
+                    nursery.start_soon(
+                        WebSocketLib.websocket_heartbeat,
+                        logger,
+                        websocket,
+                        websocket_ping_timeout,
+                        websocket_ping_interval,
+                        enable_websocket_heartbeat_logging
+                    )
+                    nursery.start_soon(webstomp_runner, websocket, nursery)
+        else:
+            async with open_websocket_url(url,
+                                          ssl_context=ssl_context,
+                                          message_queue_size=message_queue_size
+                                          ) as websocket:
+                await trio.sleep(arbitrary_wait_period)
+                async with trio.open_nursery() as nursery:
+                    nursery.start_soon(
+                        WebSocketLib.websocket_heartbeat,
+                        logger,
+                        websocket,
+                        websocket_ping_timeout,
+                        websocket_ping_interval,
+                        enable_websocket_heartbeat_logging
+                    )
+                    nursery.start_soon(webstomp_runner, websocket, nursery)
 
     async def safe_websocket_runner(logger,
-                                    url,
+                                    loggers,
                                     log_dir,
+                                    url,
+                                    host,
+                                    port,
                                     ssl_context,
+                                    websocket_message_queue_size,
                                     stats_file_prefix,
                                     arbitrary_wait_period,
                                     websocket_ping_timeout,
@@ -478,33 +608,38 @@ class WebSocketLib(object):
                                     stomp_protocol_interval_major,
                                     enable_websocket_heartbeat_logging,
                                     webstomp_runner,
-                                    loggers
+                                    use_port=False
                                     ):
         classic_shared_lib = ClassicShared(logger)
         n = 0
         while True:
             try:
                 logger.debug('Websocket connection attempt #{} to {}'
-                             ''.format(n + 1, self.config.uri))
-                stats_filename = '{}_{}.log'.format(
-                    stats_file_prefix,
-                    classic_shared_lib.zero_padded(n + 1))
-                stats_logfile = os.path.join(log_dir, stats_filename)
-                loggers['stats'] = StaticShared.get_logger(
-                    'stats',
-                    log_to_file=True,
-                    log_file_name=stats_logfile,
-                    log_file_mode='a'
-                )
+                             ''.format(n + 1, url))
+                if 'stats' not in loggers:
+                    stats_filename = '{}.log'.format(stats_file_prefix)
+                    stats_logfile = os.path.join(log_dir, stats_filename)
+                    loggers['stats'] = StaticShared.get_logger(
+                        'stats',
+                        log_to_file=True,
+                        log_file_name=stats_logfile,
+                        log_file_mode='a'
+                    )
+                loggers.stats.debug('Websocket connection attempt #{} to {}'
+                                    ''.format(n + 1, url))
                 await WebSocketLib.websocket_runner(
                     logger,
                     url,
+                    host,
+                    port,
                     ssl_context,
+                    websocket_message_queue_size,
                     arbitrary_wait_period,
                     websocket_ping_timeout,
                     websocket_ping_interval,
                     enable_websocket_heartbeat_logging,
-                    webstomp_runner
+                    webstomp_runner,
+                    use_port
                 )
             except (
                 ConnectionClosed,
@@ -513,7 +648,8 @@ class WebSocketLib(object):
                 trio.MultiError,
                 trio.ClosedResourceError,
                 exceptions.ErrorFrameReceivedException,
-                ValueError
+                ValueError,
+                trio.TooSlowError
             ):
                 logger.debug('Websocket connection attempt to {} BROKEN'
                              ' or FAILED !!'.format(url))
